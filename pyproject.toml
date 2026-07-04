@@ -2,7 +2,7 @@
 name = "vi-monitor"
 version = "0.1.0"
 description = "Backend and API for monitoring vseinstrumenti.ru product cards (price, availability, discounts, promos)."
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = [
-    "playwright>=1.47",
+    "patchright>=1.47",
 ]
 dev = [
     "pytest>=8.2",

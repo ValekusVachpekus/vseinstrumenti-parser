@@ -68,3 +68,15 @@ ruff check app tests
  - Живой автоматизированный Chromium браузер выдает капчу при заходе.
  - Подмена реальных Cookie не тестировалась, предположительно будет капча.
  - После нескольих запросов при реальном заходе с браузера сайт также отдает капчу.
+
+## Решение
+
+ - Cookie-harvest не работает: curl_cffi с TLS Firefox и полными cookie все равно 403 (нужен живой JS на каждый запрос).
+ - Работает headed patchright + постоянный профиль на чистом IP: `FETCHER_BACKEND=playwright`, `headless=false`, `channel=chromium`.
+ - На сервере без экрана - через `xvfb`. Челлендж решается один раз, дальше держится в профиле.
+ - Проверено: 200, парсинг цены/наличия за ~3с. Для 10k - низкая параллельность + большие интервалы.
+ - Установка: `pip install -e ".[browser]"` и `patchright install chromium`.
+ - В Docker worker крутит headed Chromium под Xvfb (образ `Dockerfile.worker`), профиль в volume `browserprofile`.
+ - Под Xvfb нужен спуфинг WebGL (software-GL палится) - уже вшит в fetcher.
+ - Если worker начал стабильно ловить капчу - профиль «отравлен», очистить volume: `docker compose down && docker volume rm vseinstrumenti_browserprofile`.
+ - Запуск всего стека: `docker compose up --build` (первый билд worker тянет браузер, ~пара минут).

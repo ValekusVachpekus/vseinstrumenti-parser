@@ -52,11 +52,15 @@ class Settings(BaseSettings):
     cookie_file: str = ""
     harvest_user_agent: str = ""
 
-    # Playwright backend
-    playwright_headless: bool = True
-    playwright_nav_timeout_ms: int = 45000
-    playwright_wait_ms: int = 4000
-    playwright_max_concurrency: int = 3
+    # Playwright/patchright backend. ServicePipe passes a HEADED real browser with a
+    # persistent profile and flags headless — keep headless False (use xvfb on servers).
+    playwright_headless: bool = False
+    playwright_channel: str = "chromium"
+    playwright_user_data_dir: str = "/data/vi_profile"
+    playwright_nav_timeout_ms: int = 60000
+    playwright_settle_ms: int = 2000
+    playwright_settle_tries: int = 20
+    playwright_max_concurrency: int = 2
 
     log_level: str = "INFO"
 

@@ -1,0 +1,21 @@
+# Worker image with a real (headed) browser for the patchright fetcher.
+# Based on Playwright's image: ships Chromium system deps + xvfb.
+FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /code
+
+COPY pyproject.toml ./
+COPY app ./app
+COPY docker/worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
+
+RUN pip install --upgrade pip \
+    && pip install ".[browser]" \
+    && patchright install chromium \
+    && chmod +x /usr/local/bin/worker-entrypoint.sh
+
+# ServicePipe needs a HEADED browser -> run it under a virtual X display (xvfb).
+CMD ["/usr/local/bin/worker-entrypoint.sh"]

@@ -39,14 +39,18 @@ services:
              uvicorn app.api.main:app --host 0.0.0.0 --port 8000"
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     env_file: .env
+    shm_size: "1gb"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: arq app.worker.tasks.WorkerSettings
+    volumes:
+      - browserprofile:/data
 
   scheduler:
     build: .
@@ -61,3 +65,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  browserprofile:
