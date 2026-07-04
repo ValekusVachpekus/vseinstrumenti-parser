@@ -1,0 +1,63 @@
+# Парсер vseinstrumenti
+
+Парсер для сайта vseinstrumenti.ru с API для подключения к удобному сервису для доставки уведомлений (планируется Telegram bot).
+
+## Возможности
+
+- Наблюдение за набором карточек товаров (добавление по URL или числовому id товара).
+- Настраиваемый интервал проверки: глобальный + переопределение на товар.
+- Ручной запуск проверки через API.
+- История состояний и история цен для графиков.
+- Лента событий: `price_changed`, `went_out_of_stock`, `back_in_stock`,
+  `discount_started`, `discount_ended`, `promo_changed`, `parse_failed`.
+- Авторизация по API-ключу. Модель данных с `tenant_id` для нескольких пользователей.
+- Абстрагированный транспорт (fetcher): httpx по умолчанию, точки расширения под
+  прокси / headless / внешние сервисы.
+- Глобальный rate-limit и джиттер расписания для избежания бана.
+
+## Архитектура
+
+- `api` (FastAPI) - REST, управление watchlist, чтение состояния/истории/событий.
+- `scheduler` - выбирает товары с наступившим `next_check_at` и ставит задачи в очередь.
+- `worker` - выполняет цикл fetch → parse → diff → persist → events.
+- PostgreSQL - данные и история. Redis - очередь и rate-limit.
+
+Структура кода описана в `app/` (`api`, `core`, `db`, `fetch`, `parse`, `monitor`, `worker`).
+
+## Запуск
+
+```
+cp .env.example .env
+# Заполнить .env: пароли, BOOTSTRAP_API_KEY, TARGET_CITY
+docker-compose up --build
+```
+
+При старте контейнер `api` применяет миграции (`alembic upgrade head`) и создает
+tenant по `BOOTSTRAP_API_KEY`. API на `http://localhost:8000`,
+Swagger - на `/docs`, метрики Prometheus - на `/metrics`.
+
+## Локальный запуск
+
+```
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+# офлайн-тесты
+pytest tests/test_extractor.py tests/test_urls.py tests/test_diff.py
+ruff check app tests
+```
+
+## API
+
+- `POST /v1/products` - добавить товар (`{"ref": "<url|id>"}`).
+- `GET /v1/products` / `GET /v1/products/{id}` - список / карточка с текущим состоянием.
+- `PATCH /v1/products/{id}` - интервал, активность.
+- `DELETE /v1/products/{id}` - удалить карточку.
+- `POST /v1/products/{id}/check` - ручная проверка одного товара.
+- `POST /v1/products/check` - массовая проверка.
+- `GET /v1/products/{id}/snapshots` - история состояний.
+- `GET /v1/products/{id}/price-history` - точки для графика.
+- `GET /v1/events` - лента событий (`type`, `product_id`, `since`, `until`).
+- `GET /v1/jobs/{id}` - статус задачи проверки.
+- `POST|GET|DELETE /v1/webhooks` - вебхуки.
+- `GET /health`, `GET /metrics`.
+# vseinstrumenti-parser
