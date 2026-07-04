@@ -38,6 +38,20 @@ def test_extract_in_stock_with_discount():
     assert result.raw_hash
 
 
+def test_extract_live_data_qa_fields():
+    # Mirrors the live vseinstrumenti.ru DOM (data-qa selectors + coupon button).
+    result = extract(_load("product_live_data_qa.html"))
+    assert result.is_usable()
+    assert result.price == Decimal("13990")
+    assert result.old_price == Decimal("15545")
+    assert result.discount_pct == Decimal("10.00")
+    assert result.in_stock is True
+    joined = " | ".join(result.promo_labels)
+    assert "Распродажа остатков!" in result.promo_labels
+    assert "Промокод: B2B258K1" in result.promo_labels
+    assert "для бизнеса" in joined
+
+
 def test_extract_out_of_stock():
     result = extract(_load("product_out_of_stock.html"))
     assert result.is_usable()

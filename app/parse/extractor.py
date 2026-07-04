@@ -18,6 +18,7 @@ PROMO_KEYWORDS = (
     "выгода",
     "спеццена",
     "уценка",
+    "для бизнеса",
 )
 
 _OUT_OF_STOCK_MARKERS = ("нет в наличии", "нет на складе", "снят с производства", "под заказ")
@@ -142,18 +143,28 @@ def _first_text(tree: HTMLParser, selector: str) -> str | None:
 
 
 def extract_html(tree: HTMLParser) -> ExtractResult | None:
-    price = clean_price(_first_attr(tree, 'meta[itemprop="price"]', "content"))
+    # Current price: live `data-qa` first, then microdata fallbacks.
+    price = clean_price(_first_text(tree, '[data-qa="price-now"]'))
+    if price is None:
+        price = clean_price(_first_attr(tree, 'meta[itemprop="price"]', "content"))
     if price is None:
         price = clean_price(_first_text(tree, '[data-qa="product-price-current"]'))
     if price is None:
         price = clean_price(_first_text(tree, '[itemprop="price"]'))
 
-    old_price = clean_price(_first_text(tree, '[data-qa="product-price-old"]'))
+    old_price = clean_price(_first_text(tree, '[data-qa="price-old"]'))
+    if old_price is None:
+        old_price = clean_price(_first_text(tree, '[data-qa="product-price-old"]'))
 
-    availability_raw = _first_attr(tree, 'meta[itemprop="availability"]', "href")
-    if availability_raw is None:
-        availability_raw = _first_attr(tree, 'link[itemprop="availability"]', "href")
-    availability_text = availability_raw or _first_text(tree, '[data-qa="availability"]')
+    availability_text = (
+        _first_text(tree, '[data-qa="availability-info"]')
+        or _first_text(tree, '[data-qa="product-availability"]')
+        or _first_text(tree, '[data-qa="availability"]')
+    )
+    avail_href = _first_attr(tree, 'meta[itemprop="availability"]', "href") or _first_attr(
+        tree, 'link[itemprop="availability"]', "href"
+    )
+    availability_raw = availability_text or avail_href
 
     title = _first_text(tree, "h1") or _first_attr(
         tree, 'meta[property="og:title"]', "content"
@@ -167,27 +178,48 @@ def extract_html(tree: HTMLParser) -> ExtractResult | None:
         title=title,
         price=price,
         old_price=old_price,
-        in_stock=_availability_to_bool(availability_text),
-        availability_raw=availability_text,
+        in_stock=_availability_to_bool(availability_raw),
+        availability_raw=availability_raw,
         promo_labels=promo_labels,
     )
     return result if result.is_usable() else None
 
 
+# A promo code: short uppercase latin/digit token (e.g. B2B258K1).
+_PROMO_CODE_RE = re.compile(r"^[A-Z0-9]{5,15}$")
+
+
+def _add(found: list[str], text: str | None) -> None:
+    text = (text or "").strip()
+    if text and text not in found:
+        found.append(text)
+
+
 def _collect_promos(tree: HTMLParser) -> list[str]:
     found: list[str] = []
+
+    # Promo badges ("Распродажа остатков!", etc.) and the savings nameplate.
+    for node in tree.css('[data-qa="nameplate"]'):
+        _add(found, node.text(deep=True, strip=True))
+    _add(found, _first_text(tree, '[data-qa="price-discount"]'))
+
+    # Promo codes rendered inside copy buttons (e.g. "-25% для бизнеса" → B2B258K1).
+    for btn in tree.css("button"):
+        text = btn.text(deep=True, strip=True)
+        if text and _PROMO_CODE_RE.match(text):
+            _add(found, f"Промокод: {text}")
+
+    # Keyword fallback for any other short promo lines.
     body = tree.body or tree.root
-    if body is None:
-        return found
-    for node in body.css("span, div, a, li"):
-        text = node.text(deep=False, strip=True)
-        if not text or len(text) > 60:
-            continue
-        low = text.lower()
-        if any(kw in low for kw in PROMO_KEYWORDS):
-            if text not in found:
-                found.append(text)
-    return found[:10]
+    if body is not None:
+        for node in body.css("span, div, a, li, p"):
+            text = node.text(deep=False, strip=True)
+            if not text or len(text) > 60:
+                continue
+            if any(kw in text.lower() for kw in PROMO_KEYWORDS):
+                _add(found, text)
+
+    return found[:12]
 
 
 # --- Public entry point -------------------------------------------------------
