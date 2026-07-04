@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VI Monitor — тестовая панель</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171c22; --panel2: #1e242c; --line: #2a323c;
+    --fg: #e6e9ee; --muted: #8b97a5; --accent: #3b9dff; --ok: #3ecf8e;
+    --warn: #ffb020; --err: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--fg); }
+  header { background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 10px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
+  header input { background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    padding: 6px 8px; border-radius: 6px; }
+  #apiBase { width: 220px; } #apiKey { width: 220px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
+  main { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 14px; padding: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 0 0 10px; }
+  button { background: var(--accent); color: #04121f; border: 0; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; font-weight: 600; }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; }
+  button.danger { background: transparent; color: var(--err); border: 1px solid var(--line); font-weight: 500; }
+  button:hover { filter: brightness(1.08); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input.txt { flex: 1; min-width: 180px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--fg); padding: 7px 9px; border-radius: 6px; }
+  input.num { width: 130px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--fg); padding: 7px 9px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  tr.sel td { background: var(--panel2); }
+  tr.clickable:hover td { background: #202832; cursor: pointer; }
+  .tag { padding: 1px 7px; border-radius: 20px; font-size: 12px; border: 1px solid var(--line); }
+  .tag.ok { color: var(--ok); border-color: #22493a; }
+  .tag.no { color: var(--err); border-color: #4d2830; }
+  .tag.muted { color: var(--muted); }
+  .tabs { display: flex; gap: 6px; margin: 4px 0 10px; }
+  .tabs button { background: transparent; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+  .tabs button.active { color: var(--fg); border-color: var(--accent); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin-bottom: 10px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .muted { color: var(--muted); }
+  .price { font-size: 18px; font-weight: 700; }
+  .old { text-decoration: line-through; color: var(--muted); margin-left: 8px; }
+  .disc { color: var(--warn); margin-left: 8px; font-weight: 600; }
+  #toast { position: fixed; right: 14px; bottom: 14px; background: var(--panel2);
+    border: 1px solid var(--line); padding: 10px 14px; border-radius: 8px; opacity: 0;
+    transition: opacity .2s; max-width: 380px; }
+  #toast.show { opacity: 1; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .ev-type { font-weight: 600; }
+  .empty { color: var(--muted); padding: 10px 4px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>VI Monitor</h1>
+  <label class="muted">API</label>
+  <input id="apiBase" placeholder="http(s)://host  (пусто = этот хост)">
+  <label class="muted">X-API-Key</label>
+  <input id="apiKey" placeholder="ключ">
+  <button class="ghost" onclick="saveCfg()">Сохранить</button>
+  <span class="row"><span id="hdot" class="dot"></span><span id="hstat" class="muted">health…</span></span>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Товары</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="ref" class="txt" placeholder="URL карточки или числовой id">
+      <input id="interval" class="num" type="number" min="60" placeholder="интервал, сек">
+      <button onclick="addProduct()">Добавить</button>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="ghost" onclick="loadProducts()">Обновить</button>
+      <button class="ghost" onclick="bulkCheck()">Проверить все</button>
+    </div>
+    <table id="ptable">
+      <thead><tr><th>id</th><th>Товар</th><th>Цена</th><th>Наличие</th><th></th></tr></thead>
+      <tbody id="pbody"><tr><td colspan="5" class="empty">нет данных</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Карточка <span id="detId" class="muted"></span></h2>
+    <div id="detail"><div class="empty">Выбери товар слева.</div></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let state = { products: [], selected: null, tab: 'events' };
+
+function cfg() {
+  return {
+    base: (localStorage.getItem('vi_base') || '').replace(/\/$/, ''),
+    key: localStorage.getItem('vi_key') || '',
+  };
+}
+function saveCfg() {
+  localStorage.setItem('vi_base', $('#apiBase').value.trim());
+  localStorage.setItem('vi_key', $('#apiKey').value.trim());
+  toast('Сохранено'); health(); loadProducts();
+}
+function toast(msg, err) {
+  const t = $('#toast'); t.textContent = msg; t.style.borderColor = err ? 'var(--err)' : 'var(--line)';
+  t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function api(path, opts = {}) {
+  const c = cfg();
+  const headers = Object.assign({ 'X-API-Key': c.key }, opts.headers || {});
+  if (opts.body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(c.base + path, Object.assign({}, opts, { headers }));
+  const txt = await res.text();
+  let data; try { data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
+  if (!res.ok) throw { status: res.status, data };
+  return data;
+}
+function fmtPrice(p) { return p == null ? '—' : Number(p).toLocaleString('ru-RU') + ' ₽'; }
+function stockTag(v) {
+  if (v === true) return '<span class="tag ok">в наличии</span>';
+  if (v === false) return '<span class="tag no">нет</span>';
+  return '<span class="tag muted">?</span>';
+}
+function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function when(s) { return s ? new Date(s).toLocaleString('ru-RU') : '—'; }
+
+async function health() {
+  try {
+    const h = await api('/health');
+    $('#hdot').className = 'dot ' + (h.db ? 'ok' : 'err');
+    $('#hstat').textContent = 'health: ' + h.status;
+  } catch (e) {
+    $('#hdot').className = 'dot err'; $('#hstat').textContent = 'health: down';
+  }
+}
+
+async function loadProducts() {
+  try {
+    const list = await api('/v1/products?limit=200');
+    state.products = list;
+    const rows = await Promise.all(list.map(async p => {
+      let snap = null;
+      try { const d = await api('/v1/products/' + p.id); snap = d.current; } catch {}
+      return { p, snap };
+    }));
+    const body = $('#pbody');
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">пусто — добавь товар</td></tr>'; return; }
+    body.innerHTML = rows.map(({ p, snap }) => `
+      <tr class="clickable ${state.selected === p.id ? 'sel' : ''}" onclick="select(${p.id})">
+        <td>${p.id}</td>
+        <td>${esc(p.title || p.slug || p.vi_product_id)}<br><span class="muted">${esc(p.vi_product_id)}</span></td>
+        <td>${snap ? fmtPrice(snap.price) : '<span class="muted">—</span>'}</td>
+        <td>${snap ? stockTag(snap.in_stock) : '<span class="tag muted">нет данных</span>'}</td>
+        <td class="row">
+          <button class="ghost" onclick="event.stopPropagation();check(${p.id})">Проверить</button>
+          <button class="danger" onclick="event.stopPropagation();del(${p.id})">✕</button>
+        </td>
+      </tr>`).join('');
+  } catch (e) { toast('Ошибка списка: ' + (e.status || e), true); }
+}
+
+async function addProduct() {
+  const ref = $('#ref').value.trim();
+  if (!ref) return toast('Укажи URL или id', true);
+  const iv = $('#interval').value.trim();
+  const body = { ref };
+  if (iv) body.check_interval_seconds = Number(iv);
+  try {
+    const p = await api('/v1/products', { method: 'POST', body: JSON.stringify(body) });
+    $('#ref').value = ''; $('#interval').value = '';
+    toast('Добавлен #' + p.id); await loadProducts(); select(p.id);
+  } catch (e) {
+    if (e.status === 409) toast('Уже отслеживается (#' + (e.data?.detail?.id) + ')', true);
+    else toast('Ошибка: ' + JSON.stringify(e.data || e.status), true);
+  }
+}
+async function del(id) {
+  if (!confirm('Удалить товар #' + id + '?')) return;
+  try { await api('/v1/products/' + id, { method: 'DELETE' });
+    if (state.selected === id) { state.selected = null; $('#detail').innerHTML = '<div class="empty">Выбери товар слева.</div>'; $('#detId').textContent = ''; }
+    toast('Удалён'); loadProducts();
+  } catch (e) { toast('Ошибка удаления', true); }
+}
+async function check(id) {
+  try { const r = await api('/v1/products/' + id + '/check', { method: 'POST' });
+    toast('Проверка поставлена (job ' + (r.job_id || '').slice(0, 8) + '…)');
+    setTimeout(() => { loadProducts(); if (state.selected === id) select(id); }, 1500);
+  } catch (e) { toast('Ошибка запуска', true); }
+}
+async function bulkCheck() {
+  try { const r = await api('/v1/products/check', { method: 'POST', body: JSON.stringify({}) });
+    toast('В очередь: ' + r.enqueued);
+    setTimeout(loadProducts, 2000);
+  } catch (e) { toast('Ошибка', true); }
+}
+
+function select(id) { state.selected = id; loadProducts(); renderDetail(); }
+function setTab(t) { state.tab = t; renderDetail(); }
+
+async function renderDetail() {
+  const id = state.selected; if (id == null) return;
+  $('#detId').textContent = '#' + id;
+  const el = $('#detail'); el.innerHTML = '<div class="empty">загрузка…</div>';
+  let p;
+  try { p = await api('/v1/products/' + id); }
+  catch (e) { el.innerHTML = '<div class="empty">не найдено</div>'; return; }
+  const s = p.current;
+  const head = `
+    <div class="kv">
+      <div>Название</div><div>${esc(p.title || '—')}</div>
+      <div>id ВИ</div><div><code>${esc(p.vi_product_id)}</code></div>
+      <div>URL</div><div><a href="${esc(p.url)}" target="_blank">открыть ↗</a></div>
+      <div>Город</div><div>${esc(p.city || '—')}</div>
+      <div>Активен</div><div>${p.is_active ? 'да' : 'нет'}</div>
+      <div>Интервал</div><div>${p.check_interval_seconds ? p.check_interval_seconds + ' сек' : 'по умолчанию'}</div>
+      <div>Проверен</div><div>${when(p.last_checked_at)}</div>
+      <div>След. проверка</div><div>${when(p.next_check_at)}</div>
+    </div>
+    <div style="margin-bottom:12px">
+      ${s ? `<span class="price">${fmtPrice(s.price)}</span>
+        ${s.old_price ? `<span class="old">${fmtPrice(s.old_price)}</span>` : ''}
+        ${s.discount_pct ? `<span class="disc">-${Number(s.discount_pct).toFixed(1)}%</span>` : ''}
+        ${stockTag(s.in_stock)}
+        ${(s.promo_labels || []).map(x => `<span class="tag" style="margin-left:6px">${esc(x)}</span>`).join('')}`
+      : '<span class="muted">нет снапшота — карточка ещё не считана (вероятно, блок 403)</span>'}
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="ghost" onclick="check(${id})">Проверить сейчас</button>
+    </div>
+    <div class="tabs">
+      ${['events', 'snapshots', 'price', 'crawl'].map(t =>
+        `<button class="${state.tab === t ? 'active' : ''}" onclick="setTab('${t}')">${
+          { events: 'События', snapshots: 'Снапшоты', price: 'История цен', crawl: 'Проверки' }[t]}</button>`).join('')}
+    </div>
+    <div id="tabbody"><div class="empty">загрузка…</div></div>`;
+  el.innerHTML = head;
+  renderTab(id);
+}
+
+async function renderTab(id) {
+  const b = $('#tabbody'); if (!b) return;
+  try {
+    if (state.tab === 'events') {
+      const ev = await api('/v1/events?product_id=' + id + '&limit=100');
+      b.innerHTML = ev.length ? table(['Тип', 'Было', 'Стало', 'Когда'],
+        ev.map(e => [`<span class="ev-type">${esc(e.type)}</span>`, esc(e.old_value), esc(e.new_value), when(e.created_at)]))
+        : empty('событий нет');
+    } else if (state.tab === 'snapshots') {
+      const sn = await api('/v1/products/' + id + '/snapshots?limit=100');
+      b.innerHTML = sn.length ? table(['Когда', 'Цена', 'Старая', 'Скидка', 'Наличие'],
+        sn.map(s => [when(s.captured_at), fmtPrice(s.price), s.old_price ? fmtPrice(s.old_price) : '—',
+          s.discount_pct ? Number(s.discount_pct).toFixed(1) + '%' : '—', stockTag(s.in_stock)]))
+        : empty('снапшотов нет');
+    } else if (state.tab === 'price') {
+      const ph = await api('/v1/products/' + id + '/price-history');
+      b.innerHTML = ph.length ? sparkline(ph) + table(['Когда', 'Цена', 'Наличие'],
+        ph.slice(-60).reverse().map(x => [when(x.captured_at), fmtPrice(x.price), stockTag(x.in_stock)]))
+        : empty('истории нет (нет успешных проверок)');
+    } else if (state.tab === 'crawl') {
+      const cl = await api('/v1/products/' + id + '/crawl-log?limit=50');
+      b.innerHTML = cl.length ? table(['Статус', 'HTTP', 'Начато', 'Ошибка'],
+        cl.map(c => [statusTag(c.status), c.http_status ?? '—', when(c.started_at), esc(c.error)]))
+        : empty('проверок ещё не было');
+    }
+  } catch (e) { b.innerHTML = empty('ошибка загрузки (' + (e.status || e) + ')'); }
+}
+function statusTag(s) {
+  if (s === 'ok') return '<span class="tag ok">ok</span>';
+  return '<span class="tag no">' + esc(s) + '</span>';
+}
+function table(cols, rows) {
+  return `<table><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r => `<tr>${r.map(c => `<td>${c == null || c === '' ? '<span class="muted">—</span>' : c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function empty(m) { return `<div class="empty">${m}</div>`; }
+function sparkline(ph) {
+  const pts = ph.filter(x => x.price != null).map(x => Number(x.price));
+  if (pts.length < 2) return '';
+  const w = 380, h = 60, min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+  const step = w / (pts.length - 1);
+  const d = pts.map((v, i) => `${i ? 'L' : 'M'}${(i * step).toFixed(1)},${(h - (v - min) / span * (h - 8) - 4).toFixed(1)}`).join(' ');
+  return `<svg width="${w}" height="${h}" style="margin:4px 0 10px">
+    <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+    <div class="muted" style="margin-bottom:8px">min ${fmtPrice(min)} · max ${fmtPrice(max)}</div>`;
+}
+
+// init
+$('#apiBase').value = localStorage.getItem('vi_base') || '';
+$('#apiKey').value = localStorage.getItem('vi_key') || '';
+health(); loadProducts();
+setInterval(health, 15000);
+</script>
+</body>
+</html>
